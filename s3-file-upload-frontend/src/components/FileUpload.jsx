@@ -1,18 +1,28 @@
 // frontend/src/components/FileUpload.jsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { uploadFile, uploadWithPresignedUrl, validateFile } from '../services/uploadService';
 import '../styles/FileUpload.css';
 
-const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct', currentFolder, folders = [] }) => {
+const FileUpload = ({ 
+  onUploadSuccess, 
+  uploadMethod = 'direct', 
+  currentFolder, 
+  folders = [] 
+}) => {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
   const [isPublic, setIsPublic] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [errors, setErrors] = useState([]);
-  const [selectedFolder, setSelectedFolder] = useState(currentFolder || '');
+  const [selectedFolder, setSelectedFolder] = useState('');
   const [fileRenames, setFileRenames] = useState({});
   const fileInputRef = useRef(null);
+
+  // Update selected folder when current folder changes
+  useEffect(() => {
+    setSelectedFolder(currentFolder === 'root' ? '' : currentFolder);
+  }, [currentFolder]);
 
   const handleFileSelect = (files) => {
     const validFiles = [];
@@ -87,7 +97,10 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct', currentFolder, f
   };
 
   const uploadFiles = async () => {
-    if (selectedFiles.length === 0) return;
+    if (selectedFiles.length === 0) {
+      alert('Please select files to upload');
+      return;
+    }
 
     setUploading(true);
     setErrors([]);
@@ -102,10 +115,12 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct', currentFolder, f
         
         const uploadFn = uploadMethod === 'presigned' ? uploadWithPresignedUrl : uploadFile;
         
+        console.log('Uploading file to folder:', selectedFolder || 'root');
+        
         const result = await uploadFn(
           renamedFile,
           isPublic,
-          selectedFolder,
+          selectedFolder, // This is the folder path
           (progress) => {
             setUploadProgress((prev) => ({
               ...prev,
@@ -116,6 +131,7 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct', currentFolder, f
 
         return { success: true, file: newFileName, data: result.data };
       } catch (error) {
+        console.error('Upload error:', error);
         return { success: false, file: file.name, error: error.message };
       }
     });
@@ -129,8 +145,15 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct', currentFolder, f
       setErrors(failedUploads.map((f) => `${f.file}: ${f.error}`));
     }
 
-    if (successfulUploads.length > 0 && onUploadSuccess) {
-      onUploadSuccess(successfulUploads.map((u) => u.data));
+    if (successfulUploads.length > 0) {
+      if (onUploadSuccess) {
+        onUploadSuccess(successfulUploads.map((u) => u.data));
+      }
+      alert(`✅ Successfully uploaded ${successfulUploads.length} file(s)!`);
+    }
+
+    if (failedUploads.length > 0) {
+      alert(`⚠️ ${failedUploads.length} file(s) failed to upload. Check errors below.`);
     }
 
     setUploading(false);
@@ -147,27 +170,46 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct', currentFolder, f
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
+  const getDestinationDisplay = () => {
+    if (!selectedFolder || selectedFolder === 'root' || selectedFolder === '') {
+      return '📁 Root Folder';
+    }
+    return `📁 ${selectedFolder}`;
+  };
+
   return (
     <div className="file-upload-container">
       {/* Folder Selection */}
       <div className="folder-selection">
-        <label htmlFor="folder-select">Upload to folder:</label>
+        <label htmlFor="folder-select">
+          <span className="label-icon">📂</span>
+          Upload to:
+        </label>
         <select
           id="folder-select"
           value={selectedFolder}
-          onChange={(e) => setSelectedFolder(e.target.value)}
+          onChange={(e) => {
+            console.log('Selected folder:', e.target.value);
+            setSelectedFolder(e.target.value);
+          }}
           className="folder-select"
           disabled={uploading}
         >
           <option value="">📁 Root Folder</option>
-          {folders.map((folder) => (
+          {folders && folders.length > 0 && folders.map((folder) => (
             <option key={folder.path} value={folder.path}>
               📁 {folder.path}
             </option>
           ))}
         </select>
+        {folders && folders.length === 0 && (
+          <small className="folder-hint">
+            ℹ️ No folders yet. Create folders using the "New Folder" button above.
+          </small>
+        )}
       </div>
 
+      {/* Drop Zone */}
       <div
         className={`drop-zone ${dragActive ? 'active' : ''}`}
         onDragEnter={handleDrag}
@@ -198,26 +240,45 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct', currentFolder, f
             />
           </svg>
           <p className="drop-zone-text">
-            {dragActive ? 'Drop files here' : 'Drag & drop files here'}
+            {dragActive ? '📥 Drop files here' : '☁️ Drag & drop files here'}
           </p>
           <p className="drop-zone-subtext">or click to browse</p>
           <p className="drop-zone-info">Max file size: 10MB</p>
         </div>
       </div>
 
+      {/* Errors */}
       {errors.length > 0 && (
         <div className="error-list">
+          <div className="error-header">
+            <span>⚠️ Upload Errors</span>
+            <button onClick={() => setErrors([])} className="error-clear">✕</button>
+          </div>
           {errors.map((error, index) => (
             <div key={index} className="error-item">
-              ⚠️ {error}
+              {error}
             </div>
           ))}
         </div>
       )}
 
+      {/* Selected Files */}
       {selectedFiles.length > 0 && (
         <div className="selected-files">
-          <h3>Selected Files ({selectedFiles.length})</h3>
+          <div className="selected-header">
+            <h3>Selected Files ({selectedFiles.length})</h3>
+            <button 
+              onClick={() => {
+                setSelectedFiles([]);
+                setFileRenames({});
+                setUploadProgress({});
+              }}
+              className="clear-all-btn"
+              disabled={uploading}
+            >
+              Clear All
+            </button>
+          </div>
           {selectedFiles.map((file, index) => {
             const renameKey = file.name + file.lastModified;
             return (
@@ -232,6 +293,7 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct', currentFolder, f
                       className="file-rename-input"
                       disabled={uploading}
                       placeholder="File name"
+                      title="Edit filename before upload"
                     />
                     <span className="file-size">{formatFileSize(file.size)}</span>
                   </div>
@@ -261,6 +323,7 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct', currentFolder, f
         </div>
       )}
 
+      {/* Upload Options */}
       <div className="upload-options">
         <label className="checkbox-label">
           <input
@@ -269,16 +332,27 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct', currentFolder, f
             onChange={(e) => setIsPublic(e.target.checked)}
             disabled={uploading}
           />
-          <span>Make files publicly accessible</span>
+          <span>🌐 Make files publicly accessible</span>
         </label>
       </div>
 
+      {/* Upload Button */}
       <button
         className="upload-btn"
         onClick={uploadFiles}
         disabled={uploading || selectedFiles.length === 0}
       >
-        {uploading ? 'Uploading...' : `Upload ${selectedFiles.length} file(s) to ${selectedFolder || 'root'}`}
+        {uploading ? (
+          <>
+            <span className="spinner"></span>
+            Uploading {selectedFiles.length} file(s)...
+          </>
+        ) : (
+          <>
+            <span>⬆️</span>
+            Upload {selectedFiles.length} file(s) to {getDestinationDisplay()}
+          </>
+        )}
       </button>
     </div>
   );
