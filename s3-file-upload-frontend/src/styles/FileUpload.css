@@ -7,6 +7,51 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+/* Folder Selection */
+.folder-selection {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f7fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.folder-selection label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 8px;
+}
+
+.folder-select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 2px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.folder-select:hover {
+  border-color: #cbd5e0;
+}
+
+.folder-select:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+}
+
+.folder-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f7fafc;
+}
+
+/* Drop Zone */
 .drop-zone {
   border: 2px dashed #cbd5e0;
   border-radius: 8px;
@@ -61,6 +106,7 @@
   margin: 0;
 }
 
+/* Error List */
 .error-list {
   margin-top: 16px;
   padding: 12px;
@@ -75,6 +121,7 @@
   margin: 4px 0;
 }
 
+/* Selected Files */
 .selected-files {
   margin-top: 24px;
 }
@@ -86,34 +133,72 @@
   margin-bottom: 12px;
 }
 
+/* File Item with Rename */
 .file-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px;
+  padding: 16px;
   background: #f7fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   transition: all 0.2s ease;
 }
 
 .file-item:hover {
   background: #edf2f7;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.file-info {
+.file-info-section {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.file-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.file-details {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  min-width: 0;
 }
 
-.file-name {
+/* File Rename Input */
+.file-rename-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
   color: #2d3748;
-  word-break: break-word;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.file-rename-input:hover {
+  border-color: #cbd5e0;
+}
+
+.file-rename-input:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+}
+
+.file-rename-input:disabled {
+  background: #f7fafc;
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .file-size {
@@ -121,13 +206,15 @@
   color: #718096;
 }
 
+/* Progress Bar */
 .progress-bar {
   flex: 1;
-  height: 24px;
+  height: 28px;
   background: #e2e8f0;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   position: relative;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .progress-fill {
@@ -140,24 +227,28 @@
   font-size: 12px;
   font-weight: 600;
   transition: width 0.3s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
+/* Remove Button */
 .remove-btn {
-  background: transparent;
-  border: none;
+  background: #fff5f5;
+  border: 1px solid #fc8181;
   color: #e53e3e;
   font-size: 18px;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 8px 12px;
+  border-radius: 6px;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .remove-btn:hover {
-  background: #fff5f5;
-  transform: scale(1.1);
+  background: #feb2b2;
+  transform: scale(1.05);
 }
 
+/* Upload Options */
 .upload-options {
   margin-top: 16px;
   padding: 16px;
@@ -180,10 +271,11 @@
   cursor: pointer;
 }
 
+/* Upload Button */
 .upload-btn {
   width: 100%;
   margin-top: 16px;
-  padding: 14px 24px;
+  padding: 16px 24px;
   background: linear-gradient(135deg, #4299e1, #3182ce);
   color: white;
   border: none;
@@ -204,8 +296,10 @@
   background: #cbd5e0;
   cursor: not-allowed;
   transform: none;
+  opacity: 0.6;
 }
 
+/* Responsive Design */
 @media (max-width: 768px) {
   .file-upload-container {
     padding: 16px;
@@ -222,5 +316,18 @@
 
   .drop-zone-text {
     font-size: 16px;
+  }
+
+  .file-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .file-info-section {
+    width: 100%;
+  }
+
+  .progress-bar {
+    width: 100%;
   }
 }

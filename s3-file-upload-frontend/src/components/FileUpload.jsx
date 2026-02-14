@@ -3,29 +3,35 @@ import React, { useState, useRef } from 'react';
 import { uploadFile, uploadWithPresignedUrl, validateFile } from '../services/uploadService';
 import '../styles/FileUpload.css';
 
-const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct' }) => {
+const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct', currentFolder, folders = [] }) => {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
   const [isPublic, setIsPublic] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [errors, setErrors] = useState([]);
+  const [selectedFolder, setSelectedFolder] = useState(currentFolder || '');
+  const [fileRenames, setFileRenames] = useState({});
   const fileInputRef = useRef(null);
 
   const handleFileSelect = (files) => {
     const validFiles = [];
     const newErrors = [];
+    const newRenames = { ...fileRenames };
 
     Array.from(files).forEach((file) => {
       try {
         validateFile(file);
         validFiles.push(file);
+        // Initialize with original filename
+        newRenames[file.name + file.lastModified] = file.name;
       } catch (error) {
         newErrors.push(`${file.name}: ${error.message}`);
       }
     });
 
     setSelectedFiles((prev) => [...prev, ...validFiles]);
+    setFileRenames(newRenames);
     setErrors(newErrors);
   };
 
@@ -56,12 +62,28 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct' }) => {
   };
 
   const removeFile = (index) => {
+    const fileToRemove = selectedFiles[index];
+    const renameKey = fileToRemove.name + fileToRemove.lastModified;
+    
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
     setUploadProgress((prev) => {
       const newProgress = { ...prev };
       delete newProgress[index];
       return newProgress;
     });
+    setFileRenames((prev) => {
+      const newRenames = { ...prev };
+      delete newRenames[renameKey];
+      return newRenames;
+    });
+  };
+
+  const handleRenameChange = (file, newName) => {
+    const renameKey = file.name + file.lastModified;
+    setFileRenames((prev) => ({
+      ...prev,
+      [renameKey]: newName,
+    }));
   };
 
   const uploadFiles = async () => {
@@ -72,11 +94,18 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct' }) => {
 
     const uploadPromises = selectedFiles.map(async (file, index) => {
       try {
+        const renameKey = file.name + file.lastModified;
+        const newFileName = fileRenames[renameKey] || file.name;
+        
+        // Create a new file with the renamed name
+        const renamedFile = new File([file], newFileName, { type: file.type });
+        
         const uploadFn = uploadMethod === 'presigned' ? uploadWithPresignedUrl : uploadFile;
         
         const result = await uploadFn(
-          file,
+          renamedFile,
           isPublic,
+          selectedFolder,
           (progress) => {
             setUploadProgress((prev) => ({
               ...prev,
@@ -85,7 +114,7 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct' }) => {
           }
         );
 
-        return { success: true, file: file.name, data: result.data };
+        return { success: true, file: newFileName, data: result.data };
       } catch (error) {
         return { success: false, file: file.name, error: error.message };
       }
@@ -107,6 +136,7 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct' }) => {
     setUploading(false);
     setSelectedFiles([]);
     setUploadProgress({});
+    setFileRenames({});
   };
 
   const formatFileSize = (bytes) => {
@@ -119,6 +149,25 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct' }) => {
 
   return (
     <div className="file-upload-container">
+      {/* Folder Selection */}
+      <div className="folder-selection">
+        <label htmlFor="folder-select">Upload to folder:</label>
+        <select
+          id="folder-select"
+          value={selectedFolder}
+          onChange={(e) => setSelectedFolder(e.target.value)}
+          className="folder-select"
+          disabled={uploading}
+        >
+          <option value="">📁 Root Folder</option>
+          {folders.map((folder) => (
+            <option key={folder.path} value={folder.path}>
+              📁 {folder.path}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div
         className={`drop-zone ${dragActive ? 'active' : ''}`}
         onDragEnter={handleDrag}
@@ -169,32 +218,46 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct' }) => {
       {selectedFiles.length > 0 && (
         <div className="selected-files">
           <h3>Selected Files ({selectedFiles.length})</h3>
-          {selectedFiles.map((file, index) => (
-            <div key={index} className="file-item">
-              <div className="file-info">
-                <span className="file-name">{file.name}</span>
-                <span className="file-size">{formatFileSize(file.size)}</span>
-              </div>
-              {uploadProgress[index] !== undefined && (
-                <div className="progress-bar">
-                  <div
-                    className="progress-fill"
-                    style={{ width: `${uploadProgress[index]}%` }}
-                  >
-                    {uploadProgress[index]}%
+          {selectedFiles.map((file, index) => {
+            const renameKey = file.name + file.lastModified;
+            return (
+              <div key={renameKey} className="file-item">
+                <div className="file-info-section">
+                  <div className="file-icon">📄</div>
+                  <div className="file-details">
+                    <input
+                      type="text"
+                      value={fileRenames[renameKey] || file.name}
+                      onChange={(e) => handleRenameChange(file, e.target.value)}
+                      className="file-rename-input"
+                      disabled={uploading}
+                      placeholder="File name"
+                    />
+                    <span className="file-size">{formatFileSize(file.size)}</span>
                   </div>
                 </div>
-              )}
-              {!uploading && (
-                <button
-                  className="remove-btn"
-                  onClick={() => removeFile(index)}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          ))}
+                {uploadProgress[index] !== undefined && (
+                  <div className="progress-bar">
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${uploadProgress[index]}%` }}
+                    >
+                      {uploadProgress[index]}%
+                    </div>
+                  </div>
+                )}
+                {!uploading && (
+                  <button
+                    className="remove-btn"
+                    onClick={() => removeFile(index)}
+                    title="Remove file"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -215,7 +278,7 @@ const FileUpload = ({ onUploadSuccess, uploadMethod = 'direct' }) => {
         onClick={uploadFiles}
         disabled={uploading || selectedFiles.length === 0}
       >
-        {uploading ? 'Uploading...' : `Upload ${selectedFiles.length} file(s)`}
+        {uploading ? 'Uploading...' : `Upload ${selectedFiles.length} file(s) to ${selectedFolder || 'root'}`}
       </button>
     </div>
   );

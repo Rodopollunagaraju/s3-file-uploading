@@ -1,5 +1,5 @@
 // frontend/src/App.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Login from './components/Login';
 import FileUpload from './components/FileUpload';
 import FileList from './components/FileList';
@@ -15,11 +15,11 @@ function App() {
   const [uploadMethod, setUploadMethod] = useState('direct');
   const [currentFolder, setCurrentFolder] = useState('root');
   const [folders, setFolders] = useState([]);
+  const [allFolders, setAllFolders] = useState([]);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Check if user is already logged in
     const auth = isAuthenticated();
     const storedUser = getStoredUser();
     
@@ -29,25 +29,56 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    if (authenticated) {
-      fetchFilesAndFolders();
-    }
-  }, [authenticated, currentFolder, refreshTrigger]);
-
-  const fetchFilesAndFolders = async () => {
+  const fetchFilesAndFolders = useCallback(async () => {
+    if (!authenticated) return;
+    
     setLoading(true);
     try {
       const folderPath = currentFolder === 'root' ? '' : currentFolder;
       const response = await listFiles(folderPath);
+      
       setFolders(response.data.folders || []);
       setFiles(response.data.files || []);
+      
+      // Fetch all folders for quick navigation
+      if (currentFolder === 'root' || currentFolder === '') {
+        const allResponse = await listFiles('');
+        
+        // Build complete folder list
+        const folderSet = new Set();
+        const buildFolderTree = (items) => {
+          items.forEach(item => {
+            if (item.folder && item.folder !== 'root') {
+              const parts = item.folder.split('/');
+              for (let i = 0; i < parts.length; i++) {
+                const path = parts.slice(0, i + 1).join('/');
+                folderSet.add(path);
+              }
+            }
+          });
+        };
+        
+        buildFolderTree(allResponse.data.files || []);
+        
+        const uniqueFolders = Array.from(folderSet)
+          .sort()
+          .map(path => ({
+            path,
+            name: path.split('/').pop(),
+          }));
+        
+        setAllFolders(uniqueFolders);
+      }
     } catch (error) {
       console.error('Failed to fetch files:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [authenticated, currentFolder]);
+
+  useEffect(() => {
+    fetchFilesAndFolders();
+  }, [fetchFilesAndFolders, refreshTrigger]);
 
   const handleLoginSuccess = () => {
     const storedUser = getStoredUser();
@@ -56,12 +87,15 @@ function App() {
   };
 
   const handleLogout = async () => {
-    await logout();
-    setAuthenticated(false);
-    setUser(null);
-    setCurrentFolder('root');
-    setFolders([]);
-    setFiles([]);
+    if (window.confirm('Are you sure you want to logout?')) {
+      await logout();
+      setAuthenticated(false);
+      setUser(null);
+      setCurrentFolder('root');
+      setFolders([]);
+      setAllFolders([]);
+      setFiles([]);
+    }
   };
 
   const handleUploadSuccess = (uploadedFiles) => {
@@ -79,6 +113,16 @@ function App() {
 
   const handleFolderDeleted = () => {
     setRefreshTrigger((prev) => prev + 1);
+    // If we deleted the current folder, go to root
+    setCurrentFolder('root');
+  };
+
+  const handleFileDeleted = () => {
+    setRefreshTrigger((prev) => prev + 1);
+  };
+
+  const handleFolderClick = (folderPath) => {
+    setCurrentFolder(folderPath);
   };
 
   if (!authenticated) {
@@ -91,14 +135,14 @@ function App() {
         <div className="header-content">
           <div className="header-title">
             <h1>📦 S3 File Upload System</h1>
-            <p>Secure file storage with AWS S3</p>
+            <p>Secure cloud file storage with MongoDB</p>
           </div>
           <div className="header-user">
             <div className="user-info">
               <span className="user-name">👤 {user?.name}</span>
-              <span className="user-role">{user?.role}</span>
+              <span className="user-role">{user?.role === 'admin' ? '👑 Admin' : '👥 User'}</span>
             </div>
-            <button onClick={handleLogout} className="logout-btn">
+            <button onClick={handleLogout} className="logout-btn" title="Logout">
               🚪 Logout
             </button>
           </div>
@@ -111,6 +155,7 @@ function App() {
             currentFolder={currentFolder}
             onFolderChange={handleFolderChange}
             folders={folders}
+            allFolders={allFolders}
             onFolderCreated={handleFolderCreated}
             onFolderDeleted={handleFolderDeleted}
           />
@@ -118,7 +163,7 @@ function App() {
           <div className="content-grid">
             <div className="upload-section">
               <div className="section-header">
-                <h2>Upload Files</h2>
+                <h2>📤 Upload Files</h2>
                 <div className="upload-method-toggle">
                   <label>
                     <input
@@ -144,16 +189,18 @@ function App() {
                 onUploadSuccess={handleUploadSuccess}
                 uploadMethod={uploadMethod}
                 currentFolder={currentFolder}
+                folders={allFolders}
               />
             </div>
 
             <div className="list-section">
               <FileList
-                refreshTrigger={refreshTrigger}
-                currentFolder={currentFolder}
                 files={files}
+                folders={folders}
                 loading={loading}
-                onFileDeleted={() => setRefreshTrigger((prev) => prev + 1)}
+                onFileDeleted={handleFileDeleted}
+                onFolderClick={handleFolderClick}
+                currentFolder={currentFolder}
               />
             </div>
           </div>
@@ -161,7 +208,10 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Built with React, Node.js, Express & AWS S3 | Authenticated as {user?.email}</p>
+        <p>
+          Built with React, Node.js, Express, MongoDB & AWS S3 | 
+          {user?.email} ({user?.role})
+        </p>
       </footer>
     </div>
   );
