@@ -457,10 +457,17 @@ const deleteFolder = async (req, res) => {
 /**
  * List files from MongoDB
  */
+// backend/src/controllers/fileController.js - UPDATE THE listFiles FUNCTION
+
+/**
+ * List files from MongoDB with proper folder extraction
+ */
 const listFiles = async (req, res) => {
   try {
     const folder = req.query.folder || '';
     const userId = req.user.id;
+
+    console.log('Listing files for user:', userId, 'in folder:', folder || 'root');
 
     // Get files from MongoDB
     const query = { uploadedBy: userId };
@@ -475,31 +482,57 @@ const listFiles = async (req, res) => {
       .sort({ createdAt: -1 })
       .select('-__v');
 
-    // Get unique subfolders
+    console.log('Found', files.length, 'files in current folder');
+
+    // Get ALL files to build folder structure
     const allFiles = await File.find({ uploadedBy: userId });
+    
+    console.log('Total files for user:', allFiles.length);
+
+    // Build unique folders from file paths
     const folderSet = new Set();
+    const currentPath = folder || 'root';
     
     allFiles.forEach(file => {
-      if (file.folder !== 'root' && file.folder.startsWith(folder || '')) {
-        const relativePath = file.folder.substring(folder ? folder.length + 1 : 0);
-        const nextFolder = relativePath.split('/')[0];
-        if (nextFolder) {
-          folderSet.add(nextFolder);
+      if (file.folder && file.folder !== 'root') {
+        // If we're in root, show top-level folders
+        if (currentPath === 'root' || currentPath === '') {
+          const topFolder = file.folder.split('/')[0];
+          folderSet.add(topFolder);
+        } else {
+          // If we're in a subfolder, show direct children
+          if (file.folder.startsWith(currentPath + '/')) {
+            const relativePath = file.folder.substring(currentPath.length + 1);
+            const nextFolder = relativePath.split('/')[0];
+            if (nextFolder) {
+              const fullPath = `${currentPath}/${nextFolder}`;
+              folderSet.add(fullPath);
+            }
+          }
         }
       }
     });
 
-    const folders = Array.from(folderSet).map(name => ({
-      name,
-      path: folder ? `${folder}/${name}` : name,
-      type: 'folder',
-    }));
+    // Convert to array of folder objects
+    const folders = Array.from(folderSet).map(path => {
+      const name = path.split('/').pop();
+      return {
+        name,
+        path,
+        type: 'folder',
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+
+    console.log('Found', folders.length, 'folders');
+
+    // Filter out folder marker files from the file list
+    const visibleFiles = files.filter(file => file.fileName !== '.foldermarker');
 
     res.status(200).json({
       success: true,
       data: {
         folders,
-        files: files.map(file => ({
+        files: visibleFiles.map(file => ({
           id: file._id,
           key: file.fileKey,
           name: file.fileName,
@@ -513,7 +546,7 @@ const listFiles = async (req, res) => {
           type: 'file',
         })),
         currentPath: folder || 'root',
-        totalItems: folders.length + files.length,
+        totalItems: folders.length + visibleFiles.length,
       },
     });
   } catch (error) {
@@ -529,6 +562,11 @@ const listFiles = async (req, res) => {
 /**
  * Create folder
  */
+// backend/src/controllers/fileController.js - UPDATE THIS FUNCTION
+
+/**
+ * Create folder (creates a marker file so folder is visible)
+ */
 const createFolder = async (req, res) => {
   try {
     const { folderName } = req.body;
@@ -541,14 +579,49 @@ const createFolder = async (req, res) => {
       });
     }
 
-    const sanitizedFolderName = folderName.replace(/^\/+|\/+$/g, '').replace(/[^a-zA-Z0-9-_\/]/g, '_');
+    // Sanitize folder name
+    const sanitizedFolderName = folderName
+      .replace(/^\/+|\/+$/g, '')
+      .replace(/[^a-zA-Z0-9-_\/]/g, '_');
+
+    // Create a marker file in S3 to make the folder "exist"
+    const folderKey = `users/${userId}/${sanitizedFolderName}/.foldermarker`;
+
+    const uploadParams = {
+      Bucket: S3_CONFIG.bucket,
+      Key: folderKey,
+      Body: '',
+      ContentType: 'application/x-empty',
+      Metadata: {
+        createdBy: userId,
+        createdAt: new Date().toISOString(),
+        type: 'folder-marker',
+      },
+    };
+
+    // Upload marker file to S3
+    const command = new PutObjectCommand(uploadParams);
+    await s3Client.send(command);
+
+    // IMPORTANT: Also create a File record in MongoDB so folder appears in list
+    await File.create({
+      fileName: '.foldermarker',
+      fileKey: folderKey,
+      fileUrl: `https://${S3_CONFIG.bucket}.s3.${S3_CONFIG.region}.amazonaws.com/${folderKey}`,
+      folder: sanitizedFolderName,
+      size: 0,
+      contentType: 'application/x-empty',
+      isPublic: false,
+      uploadedBy: userId,
+      uploadedByEmail: req.user.email,
+    });
 
     res.status(201).json({
       success: true,
       message: 'Folder created successfully',
       data: {
         folderName: sanitizedFolderName,
-        folderPath: sanitizedFolderName,
+        folderPath: `users/${userId}/${sanitizedFolderName}`,
       },
     });
   } catch (error) {
@@ -560,6 +633,7 @@ const createFolder = async (req, res) => {
     });
   }
 };
+
 
 /**
  * Get user storage stats

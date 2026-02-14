@@ -1,13 +1,19 @@
-// frontend/src/components/FileList.jsx
+// frontend/src/components/FileList.jsx - WITH BACK NAVIGATION
 import React, { useState } from 'react';
 import { deleteFile, getFileUrl } from '../services/uploadService';
 import '../styles/FileList.css';
 
-const FileList = ({ files = [], folders = [], loading, onFileDeleted, onFolderClick, currentFolder }) => {
+const FileList = ({ 
+  files = [], 
+  folders = [], 
+  loading, 
+  onFileDeleted, 
+  onFolderClick, 
+  currentFolder,
+  onNavigateUp 
+}) => {
   const [deletingFile, setDeletingFile] = useState(null);
   const [error, setError] = useState(null);
-  const [renamingFile, setRenamingFile] = useState(null);
-  const [newFileName, setNewFileName] = useState('');
 
   const handleDelete = async (fileKey, fileName) => {
     if (!window.confirm(`Are you sure you want to delete "${fileName}"?`)) {
@@ -24,11 +30,11 @@ const FileList = ({ files = [], folders = [], loading, onFileDeleted, onFolderCl
         onFileDeleted();
       }
       
-      alert('File deleted successfully!');
+      alert('✅ File deleted successfully!');
     } catch (err) {
       console.error('Delete error:', err);
       setError(`Failed to delete ${fileName}: ${err.message}`);
-      alert(`Failed to delete file: ${err.message}`);
+      alert(`❌ Failed to delete file: ${err.message}`);
     } finally {
       setDeletingFile(null);
     }
@@ -40,6 +46,7 @@ const FileList = ({ files = [], folders = [], loading, onFileDeleted, onFolderCl
       window.open(response.data.url, '_blank');
     } catch (err) {
       setError(`Failed to get URL for ${fileName}: ${err.message}`);
+      alert(`❌ Failed to view file: ${err.message}`);
     }
   };
 
@@ -54,17 +61,8 @@ const FileList = ({ files = [], folders = [], loading, onFileDeleted, onFolderCl
       document.body.removeChild(link);
     } catch (err) {
       setError(`Failed to download ${fileName}: ${err.message}`);
+      alert(`❌ Failed to download file: ${err.message}`);
     }
-  };
-
-  const startRename = (file) => {
-    setRenamingFile(file.key);
-    setNewFileName(file.name);
-  };
-
-  const cancelRename = () => {
-    setRenamingFile(null);
-    setNewFileName('');
   };
 
   const formatFileSize = (bytes) => {
@@ -117,13 +115,25 @@ const FileList = ({ files = [], folders = [], loading, onFileDeleted, onFolderCl
   }
 
   const totalItems = folders.length + files.length;
+  const canGoBack = currentFolder && currentFolder !== 'root';
 
   return (
     <div className="file-list-container">
       <div className="file-list-header">
-        <h2>
-          📂 {currentFolder === 'root' || !currentFolder ? 'All Files' : currentFolder}
-        </h2>
+        <div className="header-title-section">
+          {canGoBack && (
+            <button 
+              className="back-button" 
+              onClick={onNavigateUp}
+              title="Go back to parent folder"
+            >
+              ⬅️
+            </button>
+          )}
+          <h2>
+            📂 {currentFolder === 'root' || !currentFolder ? 'All Files' : currentFolder}
+          </h2>
+        </div>
         <span className="item-count">
           {totalItems} item{totalItems !== 1 ? 's' : ''}
         </span>
@@ -140,7 +150,11 @@ const FileList = ({ files = [], folders = [], loading, onFileDeleted, onFolderCl
         <div className="empty-state">
           <div className="empty-icon">📭</div>
           <p className="empty-title">No files here</p>
-          <p className="empty-subtitle">Upload files to get started</p>
+          <p className="empty-subtitle">
+            {currentFolder === 'root' || !currentFolder 
+              ? 'Upload files to get started' 
+              : 'This folder is empty'}
+          </p>
         </div>
       ) : (
         <div className="file-list">
@@ -182,37 +196,20 @@ const FileList = ({ files = [], folders = [], loading, onFileDeleted, onFolderCl
                   <div className="file-list-info">
                     <div className="file-icon-large">{getFileIcon(file.contentType)}</div>
                     <div className="file-details-section">
-                      {renamingFile === file.key ? (
-                        <div className="rename-section">
-                          <input
-                            type="text"
-                            value={newFileName}
-                            onChange={(e) => setNewFileName(e.target.value)}
-                            className="rename-input"
-                            autoFocus
-                          />
-                          <button onClick={cancelRename} className="rename-cancel-btn">
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="file-list-name" title={file.name}>
-                            {file.name}
-                          </div>
-                          <div className="file-list-meta">
-                            <span>{formatFileSize(file.size)}</span>
+                      <div className="file-list-name" title={file.name}>
+                        {file.name}
+                      </div>
+                      <div className="file-list-meta">
+                        <span>{formatFileSize(file.size)}</span>
+                        <span>•</span>
+                        <span>{formatDate(file.lastModified)}</span>
+                        {file.downloadCount > 0 && (
+                          <>
                             <span>•</span>
-                            <span>{formatDate(file.lastModified)}</span>
-                            {file.downloadCount > 0 && (
-                              <>
-                                <span>•</span>
-                                <span>⬇️ {file.downloadCount}</span>
-                              </>
-                            )}
-                          </div>
-                        </>
-                      )}
+                            <span>⬇️ {file.downloadCount}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="file-list-actions">

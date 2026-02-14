@@ -1,4 +1,4 @@
-// frontend/src/App.js
+// frontend/src/App.js - COMPLETE FIXED VERSION
 import React, { useState, useEffect, useCallback } from 'react';
 import Login from './components/Login';
 import FileUpload from './components/FileUpload';
@@ -29,20 +29,27 @@ function App() {
     }
   }, []);
 
-  const buildAllFolders = useCallback((filesData) => {
+  const buildAllFolders = useCallback((allFilesData) => {
     const folderSet = new Set();
     
-    filesData.forEach(file => {
+    // Extract all unique folder paths from files
+    allFilesData.forEach(file => {
       if (file.folder && file.folder !== 'root') {
-        // Add all parent paths
+        // Add the exact folder path
+        folderSet.add(file.folder);
+        
+        // Also add all parent paths
         const parts = file.folder.split('/');
-        for (let i = 0; i < parts.length; i++) {
-          const path = parts.slice(0, i + 1).join('/');
-          folderSet.add(path);
+        for (let i = 1; i < parts.length; i++) {
+          const parentPath = parts.slice(0, i).join('/');
+          folderSet.add(parentPath);
         }
       }
     });
     
+    console.log('Unique folders found:', Array.from(folderSet));
+    
+    // Convert to array of folder objects
     const uniqueFolders = Array.from(folderSet)
       .sort()
       .map(path => ({
@@ -58,15 +65,28 @@ function App() {
     
     setLoading(true);
     try {
+      console.log('Fetching files for folder:', currentFolder);
+      
+      // Get files for current folder
       const folderPath = currentFolder === 'root' ? '' : currentFolder;
       const response = await listFiles(folderPath);
+      
+      console.log('API Response:', response.data);
       
       setFolders(response.data.folders || []);
       setFiles(response.data.files || []);
       
-      // Build complete folder list from all files
-      const allFilesResponse = await listFiles('');
-      const allFoldersList = buildAllFolders(allFilesResponse.data.files || []);
+      // Get ALL files to build complete folder list
+      const allResponse = await listFiles('');
+      const allFilesData = allResponse.data.files || [];
+      
+      console.log('All files count:', allFilesData.length);
+      
+      // Build complete folder list
+      const allFoldersList = buildAllFolders(allFilesData);
+      
+      console.log('All folders for dropdown:', allFoldersList);
+      
       setAllFolders(allFoldersList);
       
     } catch (error) {
@@ -101,7 +121,6 @@ function App() {
 
   const handleUploadSuccess = (uploadedFiles) => {
     console.log('Files uploaded successfully:', uploadedFiles);
-    // Refresh file list
     setRefreshTrigger((prev) => prev + 1);
   };
 
@@ -118,7 +137,6 @@ function App() {
   const handleFolderDeleted = () => {
     console.log('Folder deleted, refreshing...');
     setRefreshTrigger((prev) => prev + 1);
-    // Go back to root if we deleted the current folder
     setCurrentFolder('root');
   };
 
@@ -216,6 +234,21 @@ function App() {
                   currentFolder={currentFolder}
                   folders={allFolders}
                 />
+                
+                {/* Debug Info */}
+                <div style={{ 
+                  padding: '12px', 
+                  background: '#f0f0f0', 
+                  borderRadius: '8px', 
+                  marginTop: '12px',
+                  fontSize: '12px',
+                  fontFamily: 'monospace'
+                }}>
+                  <div><strong>Debug Info:</strong></div>
+                  <div>Current Folder: {currentFolder}</div>
+                  <div>Folders in allFolders: {allFolders.length}</div>
+                  <div>Folder Names: {allFolders.map(f => f.name).join(', ') || 'None'}</div>
+                </div>
               </div>
             </section>
 
@@ -229,6 +262,14 @@ function App() {
                   onFileDeleted={handleFileDeleted}
                   onFolderClick={handleFolderClick}
                   currentFolder={currentFolder}
+                  onNavigateUp={() => {
+                    if (currentFolder && currentFolder !== 'root') {
+                      const parts = currentFolder.split('/');
+                      parts.pop();
+                      const newPath = parts.length > 0 ? parts.join('/') : 'root';
+                      handleFolderChange(newPath);
+                    }
+                  }}
                 />
               </div>
             </section>
