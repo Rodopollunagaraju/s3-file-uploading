@@ -5,18 +5,32 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const api = axios.create({
   baseURL: `${API_URL}/api/files`,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
+
+// Add token to requests
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 /**
  * Upload file directly to server (server uploads to S3)
  */
-export const uploadFile = async (file, isPublic = false, onProgress) => {
+export const uploadFile = async (file, isPublic = false, folder = '', onProgress) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('isPublic', isPublic);
+  if (folder) {
+    formData.append('folder', folder);
+  }
 
   try {
     const response = await api.post('/upload', formData, {
@@ -44,7 +58,7 @@ export const uploadFile = async (file, isPublic = false, onProgress) => {
 /**
  * Upload multiple files
  */
-export const uploadMultipleFiles = async (files, isPublic = false, onProgress) => {
+export const uploadMultipleFiles = async (files, isPublic = false, folder = '', onProgress) => {
   const formData = new FormData();
   
   files.forEach((file) => {
@@ -52,6 +66,9 @@ export const uploadMultipleFiles = async (files, isPublic = false, onProgress) =
   });
   
   formData.append('isPublic', isPublic);
+  if (folder) {
+    formData.append('folder', folder);
+  }
 
   try {
     const response = await api.post('/upload-multiple', formData, {
@@ -79,13 +96,14 @@ export const uploadMultipleFiles = async (files, isPublic = false, onProgress) =
 /**
  * Get pre-signed URL and upload directly to S3
  */
-export const uploadWithPresignedUrl = async (file, isPublic = false, onProgress) => {
+export const uploadWithPresignedUrl = async (file, isPublic = false, folder = '', onProgress) => {
   try {
     // Step 1: Get pre-signed URL from backend
     const presignedResponse = await api.post('/presigned-url', {
       fileName: file.name,
       fileType: file.type,
       isPublic,
+      folder,
     });
 
     const { uploadUrl, fileKey, fileUrl } = presignedResponse.data.data;
@@ -111,6 +129,7 @@ export const uploadWithPresignedUrl = async (file, isPublic = false, onProgress)
         fileName: file.name,
         fileKey,
         fileUrl,
+        folder: folder || 'root',
         size: file.size,
         contentType: file.type,
       },
@@ -153,12 +172,26 @@ export const deleteFile = async (fileKey) => {
 };
 
 /**
- * List all files in bucket
+ * Delete folder from S3
  */
-export const listFiles = async (prefix = 'uploads/', maxKeys = 100) => {
+export const deleteFolder = async (folderPath) => {
+  try {
+    const response = await api.delete(`/folders/${folderPath}`);
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.message || 'Failed to delete folder'
+    );
+  }
+};
+
+/**
+ * List all files in bucket or specific folder
+ */
+export const listFiles = async (folder = '', maxKeys = 1000) => {
   try {
     const response = await api.get('/', {
-      params: { prefix, maxKeys },
+      params: { folder, maxKeys },
     });
     return response.data;
   } catch (error) {
@@ -169,10 +202,26 @@ export const listFiles = async (prefix = 'uploads/', maxKeys = 100) => {
 };
 
 /**
+ * Create a new folder
+ */
+export const createFolder = async (folderName) => {
+  try {
+    const response = await api.post('/folders', {
+      folderName,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.message || 'Failed to create folder'
+    );
+  }
+};
+
+/**
  * Validate file before upload
  */
 export const validateFile = (file, maxSizeMB = 10) => {
-  const maxSize = maxSizeMB * 1024 * 1024; // Convert MB to bytes
+  const maxSize = maxSizeMB * 1024 * 1024;
   
   if (file.size > maxSize) {
     throw new Error(`File size exceeds ${maxSizeMB}MB limit`);
@@ -201,6 +250,8 @@ export default {
   uploadWithPresignedUrl,
   getFileUrl,
   deleteFile,
+  deleteFolder,
   listFiles,
+  createFolder,
   validateFile,
 };
