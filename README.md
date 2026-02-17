@@ -237,13 +237,3 @@ s3-file-upload-system/
 | GET | `/api/files` | ✅ | List files & folders |
 | GET | `/api/files/url/:fileKey` | ✅ | Pre-signed download URL |
 | DELETE | `/api/files/:fileKey` | ✅ | Delete file |
-
----
-
-## ⚠️ Before Going to Production
-
-- Change the default admin password immediately
-- Use a strong random `JWT_SECRET` (32+ characters)
-- Restrict MongoDB Atlas network access to your server IP
-- Set `NODE_ENV=production`
-- Enable HTTPS on your domain
